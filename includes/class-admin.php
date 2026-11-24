@@ -243,6 +243,8 @@ JS;
             'csn_wa_lang'          => 'WhatsApp / API oficial: idioma do template (ex.: pt_BR)',
             'csn_cb_secret'        => 'ClickBank: chave secreta do INS',
             'csn_github_repo'      => 'Atualizações: repositório GitHub (usuário/repo)',
+            'csn_form_fields'      => 'Formulário: nome do campo que recebe o gclid (ex.: sub2)',
+            'csn_form_selector'    => 'Formulário: criar o campo oculto nos formulários com este seletor CSS (opcional, ex.: #pedido)',
             'csn_ipinfo_token'     => 'ipinfo.io: token (opcional)',
             'csn_gads_name'        => 'Google Ads: nome da conversão',
             'csn_gads_tz'          => 'Google Ads: fuso da conta (ex.: America/Sao_Paulo)',
@@ -257,6 +259,9 @@ JS;
             printf('<tr><th>%s</th><td><input type="text" class="regular-text" name="%s" value="%s" autocomplete="off"></td></tr>', esc_html($label), esc_attr($k), self::opt($k));
         }
         echo '</tbody></table><p><button class="button button-primary">Salvar</button></p></form>';
+
+        echo '<hr><h2>Página fora do WordPress</h2><p>Cole este código antes do <code>&lt;/body&gt;</code> da página. Ele guarda o gclid, preenche o campo do formulário e registra o clique neste site.</p>';
+        echo '<p><textarea readonly rows="3" class="large-text code" onclick="this.select()">' . esc_textarea(CSN_Tracker::snippet()) . '</textarea></p>';
 
         echo '<hr><p>Versão instalada: <strong>' . esc_html(CSN_VERSION) . '</strong></p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
@@ -300,6 +305,9 @@ JS;
             foreach (['csn_telegram_token', 'csn_telegram_chat', 'csn_cb_secret', 'csn_ipinfo_token', 'csn_gads_name', 'csn_gads_tz', 'csn_wa_callmebot_key', 'csn_wa_cloud_token', 'csn_wa_template', 'csn_wa_lang'] as $k) {
                 update_option($k, sanitize_text_field(wp_unslash($_POST[$k] ?? '')));
             }
+            $ff = preg_replace('/[^A-Za-z0-9_,\-\[\]]/', '', sanitize_text_field(wp_unslash($_POST['csn_form_fields'] ?? '')));
+            update_option('csn_form_fields', $ff !== '' ? $ff : 'sub2');
+            update_option('csn_form_selector', sanitize_text_field(wp_unslash($_POST['csn_form_selector'] ?? '')));
             $prov = sanitize_key($_POST['csn_wa_provider'] ?? '');
             update_option('csn_wa_provider', in_array($prov, ['callmebot', 'cloud'], true) ? $prov : '');
             update_option('csn_wa_phone', preg_replace('/\D/', '', sanitize_text_field(wp_unslash($_POST['csn_wa_phone'] ?? ''))));
