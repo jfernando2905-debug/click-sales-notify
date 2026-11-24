@@ -124,7 +124,8 @@ class CSN_Postback {
             'product'   => sanitize_text_field($item['productTitle'] ?? ''),
             'amount'    => (float) ($n['totalAccountAmount'] ?? 0),
             'currency'  => sanitize_text_field($n['currency'] ?? 'USD'),
-            'click_id'  => sanitize_text_field($codes[0] ?? ''),
+            // O tracker troca "-" por "_d_" no tid; aqui volta ao gclid original.
+            'click_id'  => str_replace('_d_', '-', sanitize_text_field($codes[0] ?? '')),
             'event_raw' => $type,
         ];
     }

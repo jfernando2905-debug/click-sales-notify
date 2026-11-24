@@ -9,7 +9,31 @@ class CSN_Tracker {
 
     static function enqueue() {
         wp_enqueue_script('csn-tracker', CSN_URL . 'assets/tracker.js', [], CSN_VERSION, ['in_footer' => true, 'strategy' => 'defer']);
-        wp_localize_script('csn-tracker', 'CSN', ['endpoint' => esc_url_raw(rest_url('csn/v1/click'))]);
+        wp_localize_script('csn-tracker', 'CSN', [
+            'endpoint' => esc_url_raw(rest_url('csn/v1/click')),
+            'fields'   => self::fields(),
+            'inject'   => self::inject(),
+        ]);
+    }
+
+    // Nomes dos campos do formulário que recebem o gclid (padrão: sub2).
+    static function fields() {
+        $f = preg_replace('/[^A-Za-z0-9_,\-\[\]]/', '', (string) get_option('csn_form_fields', 'sub2'));
+        return $f !== '' ? $f : 'sub2';
+    }
+
+    // Seletor CSS dos formulários que ganham o campo oculto se ainda não o tiverem (vazio = não cria).
+    static function inject() {
+        return (string) get_option('csn_form_selector', '');
+    }
+
+    // Trecho para colar em páginas fora do WordPress.
+    static function snippet() {
+        $attrs = ' data-endpoint="' . esc_url(rest_url('csn/v1/click')) . '" data-fields="' . esc_attr(self::fields()) . '"';
+        if (self::inject() !== '') {
+            $attrs .= ' data-inject="' . esc_attr(self::inject()) . '"';
+        }
+        return '<script src="' . esc_url(CSN_URL . 'assets/tracker.js') . '?v=' . CSN_VERSION . '"' . $attrs . ' defer></script>';
     }
 
     static function register() {
