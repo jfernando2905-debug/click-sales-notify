@@ -1,0 +1,25 @@
+name: Gerar zip da release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Montar zip com a pasta click-sales-notify
+        run: |
+          mkdir -p /tmp/build/click-sales-notify
+          rsync -a --exclude='.git' --exclude='.github' --exclude='README.md' ./ /tmp/build/click-sales-notify/
+          (cd /tmp/build && zip -qr "$GITHUB_WORKSPACE/click-sales-notify.zip" click-sales-notify)
+
+      - name: Anexar o zip na release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" click-sales-notify.zip --clobber
