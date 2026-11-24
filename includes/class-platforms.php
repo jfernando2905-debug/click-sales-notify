@@ -9,16 +9,16 @@ class CSN_Platforms {
         'amount'   => 'Comissão',
         'currency' => 'Moeda',
         'click_id' => 'Click ID (gclid)',
-        'event'    => 'Evento (opcional)',
+        'status'   => 'Status (opcional)',
     ];
 
     static function all() {
         $empty = array_fill_keys(array_keys(self::FIELDS), '');
         return [
-            'drcash' => ['name' => 'Dr.Cash', 'hint' => 'Envie o gclid no parâmetro sub2.',
-                'macros' => array_merge($empty, ['order_id' => '{uuid}', 'product' => '{offer}', 'amount' => '{payment}', 'currency' => '{currency}', 'click_id' => '{sub2}'])],
+            'drcash' => ['name' => 'Dr.Cash', 'hint' => 'Envie o gclid no sub2. Marque Nova conversão, Confirmação e Rejeição na Dr.Cash: o {status} informa hold, approved ou rejected.',
+                'macros' => array_merge($empty, ['order_id' => '{uuid}', 'product' => '{offer}', 'amount' => '{payment}', 'currency' => '{currency}', 'click_id' => '{sub2}', 'status' => '{status}'])],
             'clickbank' => ['name' => 'ClickBank (postback S2S)', 'hint' => 'Envie o gclid no extclid.',
-                'macros' => array_merge($empty, ['order_id' => '{order_id}', 'amount' => '{affiliate_earnings}', 'currency' => '{order_currency}', 'click_id' => '{extclid}', 'event' => '{event_type}'])],
+                'macros' => array_merge($empty, ['order_id' => '{order_id}', 'amount' => '{affiliate_earnings}', 'currency' => '{order_currency}', 'click_id' => '{extclid}', 'status' => '{event_type}'])],
             'clickbank-ins' => ['name' => 'ClickBank (INS)', 'mode' => 'clickbank_ins',
                 'hint' => 'Use esta URL no INS e preencha a chave secreta em Configurações. O click ID vem do primeiro tracking code.'],
             'buygoods' => ['name' => 'BuyGoods', 'hint' => 'Envie o gclid no SUBID2.',
@@ -37,7 +37,10 @@ class CSN_Platforms {
         }
         $saved = get_option('csn_macros', []);
         $mine  = (is_array($saved) && isset($saved[$slug]) && is_array($saved[$slug])) ? $saved[$slug] : [];
-        return array_merge($all[$slug]['macros'], $mine);
+        if (isset($mine['event']) && !isset($mine['status'])) {
+            $mine['status'] = $mine['event']; // compatibilidade com a versão 1.2.0
+        }
+        return array_merge($all[$slug]['macros'], array_intersect_key($mine, self::FIELDS));
     }
 
     // As macros ficam sem url-encode de propósito: a rede troca {macro} pelo valor.

@@ -2,7 +2,7 @@
 defined('ABSPATH') || exit;
 
 class CSN_DB {
-    const VERSION = '1';
+    const VERSION = '2';
 
     static function clicks()      { global $wpdb; return $wpdb->prefix . 'csn_clicks'; }
     static function conversions() { global $wpdb; return $wpdb->prefix . 'csn_conversions'; }
@@ -30,6 +30,7 @@ class CSN_DB {
             platform VARCHAR(30) NOT NULL,
             order_id VARCHAR(100) NOT NULL,
             event VARCHAR(20) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'approved',
             click_id VARCHAR(255) NOT NULL DEFAULT '',
             amount DECIMAL(10,2) NOT NULL DEFAULT 0,
             currency VARCHAR(3) NOT NULL DEFAULT 'USD',
@@ -49,6 +50,7 @@ class CSN_DB {
     }
 
     static function maybe_upgrade() {
+        add_option('csn_form_fields', 'sub2');
         if (get_option('csn_db_version') !== self::VERSION) {
             self::install();
         }

@@ -7,6 +7,7 @@ class CSN_Admin {
         add_action('admin_post_csn_save', [__CLASS__, 'save']);
         add_action('admin_post_csn_regen', [__CLASS__, 'regen']);
         add_action('admin_post_csn_delete', [__CLASS__, 'delete']);
+        add_action('wp_ajax_csn_test_postback', [__CLASS__, 'test_postback']);
         add_action('admin_post_csn_export', [__CLASS__, 'export']);
     }
 
@@ -63,7 +64,8 @@ class CSN_Admin {
         $start_gmt   = $start_local->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
 
         $clicks = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $c WHERE clicked_at >= %s", $start_gmt));
-        $rows   = $wpdb->get_results($wpdb->prepare("SELECT platform, event, amount, currency, created_at FROM $v WHERE event IN ('sale','refund') AND created_at >= %s", $start_gmt));
+        $rows   = $wpdb->get_results($wpdb->prepare("SELECT platform, event, amount, currency, created_at FROM $v WHERE event IN ('sale','refund') AND status = 'approved' AND created_at >= %s", $start_gmt));
+        $hold = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $v WHERE event = 'sale' AND status = 'hold' AND created_at >= %s", $start_gmt));
 
         $sales = 0; $refunds = 0; $rev = []; $byday = []; $byplat = [];
         foreach ($rows as $x) {
@@ -100,7 +102,7 @@ class CSN_Admin {
         $rate = $clicks > 0 ? number_format_i18n($sales / $clicks * 100, 1) . '%' : '-';
         echo '<div class="csn-cards">';
         printf('<div class="csn-card"><small>Cliques</small><strong>%s</strong></div>', esc_html(number_format_i18n($clicks)));
-        printf('<div class="csn-card"><small>Vendas</small><strong>%s</strong><span>%s reembolso(s)</span></div>', esc_html(number_format_i18n($sales)), esc_html(number_format_i18n($refunds)));
+        printf('<div class="csn-card"><small>Vendas</small><strong>%s</strong><span>%s reembolso(s) · %s em hold</span></div>', esc_html(number_format_i18n($sales)), esc_html(number_format_i18n($refunds)), esc_html(number_format_i18n($hold)));
         printf('<div class="csn-card"><small>Conversão</small><strong>%s</strong></div>', esc_html($rate));
         echo '<div class="csn-card"><small>Receita líquida</small>';
         if (!$rev) {
@@ -164,17 +166,17 @@ class CSN_Admin {
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(\'Apagar as conversões selecionadas? Isso não pode ser desfeito.\')">';
         wp_nonce_field('csn_delete');
         echo '<input type="hidden" name="action" value="csn_delete"><p><button class="button">Apagar selecionadas</button></p>';
-        echo '<table class="widefat striped"><thead><tr><td class="check-column"><input type="checkbox" onclick="var s=this.checked;document.querySelectorAll(\'.csn-row\').forEach(function(c){c.checked=s})"></td><th>Data</th><th>Rede</th><th>Evento</th><th>Pedido</th><th>Produto</th><th>Valor</th><th>Click ID</th><th>País</th></tr></thead><tbody>';
+        echo '<table class="widefat striped"><thead><tr><td class="check-column"><input type="checkbox" onclick="var s=this.checked;document.querySelectorAll(\'.csn-row\').forEach(function(c){c.checked=s})"></td><th>Data</th><th>Rede</th><th>Evento</th><th>Status</th><th>Pedido</th><th>Produto</th><th>Valor</th><th>Click ID</th><th>País</th></tr></thead><tbody>';
         if (!$rows) {
-            echo '<tr><td colspan="9">Nenhuma conversão ainda.</td></tr>';
+            echo '<tr><td colspan="10">Nenhuma conversão ainda.</td></tr>';
         }
         foreach ($rows as $x) {
             printf(
-                '<tr><th scope="row" class="check-column"><input type="checkbox" class="csn-row" name="ids[]" value="%d"></th><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s %s</td><td>%s</td><td>%s</td></tr>',
+                '<tr><th scope="row" class="check-column"><input type="checkbox" class="csn-row" name="ids[]" value="%d"></th><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s %s</td><td>%s</td><td>%s</td></tr>',
                 (int) $x->id,
                 esc_html(get_date_from_gmt($x->created_at, 'd/m/Y H:i')),
                 esc_html($all[$x->platform]['name'] ?? $x->platform),
-                esc_html($x->event), esc_html($x->order_id), esc_html($x->product),
+                esc_html($x->event), esc_html($x->status), esc_html($x->order_id), esc_html($x->product),
                 esc_html($x->currency), esc_html(number_format((float) $x->amount, 2, '.', '')),
                 esc_html($x->click_id), esc_html((string) $x->country)
             );
@@ -197,7 +199,7 @@ class CSN_Admin {
                 }
                 echo '</tbody></table>';
             }
-            echo '<p style="display:flex;gap:8px;align-items:center"><input type="text" id="csn-url-' . esc_attr($slug) . '" class="large-text code" readonly onfocus="this.select()" value="' . esc_attr(CSN_Platforms::url($slug)) . '"><button type="button" class="button csn-copy" data-target="csn-url-' . esc_attr($slug) . '">Copiar</button></p>';
+            echo '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="text" id="csn-url-' . esc_attr($slug) . '" class="code" style="flex:1;min-width:260px" readonly onfocus="this.select()" value="' . esc_attr(CSN_Platforms::url($slug)) . '"><button type="button" class="button csn-copy" data-target="csn-url-' . esc_attr($slug) . '">Copiar</button><button type="button" class="button csn-test" data-slug="' . esc_attr($slug) . '" data-nonce="' . esc_attr(wp_create_nonce('csn_test')) . '">Testar</button><span class="csn-test-out"></span></p>';
         }
         echo '<p><button class="button button-primary">Salvar macros</button></p></form>';
         echo '<hr><form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(\'Os postbacks atuais deixam de funcionar. Continuar?\')">';
@@ -222,6 +224,17 @@ document.querySelectorAll('.csn-copy').forEach(function (b) {
     }
   });
 });
+document.querySelectorAll('.csn-test').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var out = b.parentNode.querySelector('.csn-test-out');
+    out.textContent = 'Enviando...';
+    var body = new URLSearchParams({ action: 'csn_test_postback', _ajax_nonce: b.dataset.nonce, slug: b.dataset.slug });
+    fetch(window.ajaxurl, { method: 'POST', body: body, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { out.textContent = j.success ? j.data.message : 'Falhou: ' + ((j.data && j.data.message) || j.data); })
+      .catch(function () { out.textContent = 'Falhou: sem resposta do servidor.'; });
+  });
+});
 </script>
 JS;
     }
@@ -242,6 +255,7 @@ JS;
             'csn_wa_template'      => 'WhatsApp / API oficial: nome do template (opcional)',
             'csn_wa_lang'          => 'WhatsApp / API oficial: idioma do template (ex.: pt_BR)',
             'csn_cb_secret'        => 'ClickBank: chave secreta do INS',
+            'csn_form_fields'      => 'Formulário: campos que recebem o gclid (separados por vírgula)',
             'csn_github_repo'      => 'Atualizações: repositório GitHub (usuário/repo)',
             'csn_ipinfo_token'     => 'ipinfo.io: token (opcional)',
             'csn_gads_name'        => 'Google Ads: nome da conversão',
@@ -258,6 +272,9 @@ JS;
         }
         echo '</tbody></table><p><button class="button button-primary">Salvar</button></p></form>';
 
+        $snippet = '<script src="' . esc_url_raw(CSN_URL . 'assets/tracker.js') . '" data-endpoint="' . esc_url_raw(rest_url('csn/v1/click')) . '" data-fields="' . implode(',', CSN_Tracker::fields()) . '" defer></script>';
+        echo '<hr><h3>Página fora deste WordPress</h3><p>Se o formulário fica em outra página ou domínio, cole este código no <code>&lt;head&gt;</code> dela. Nas páginas deste WordPress ele já é carregado sozinho.</p>';
+        echo '<textarea readonly rows="3" class="large-text code" onfocus="this.select()">' . esc_textarea($snippet) . '</textarea>';
         echo '<hr><p>Versão instalada: <strong>' . esc_html(CSN_VERSION) . '</strong></p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         wp_nonce_field('csn_check_update');
@@ -304,6 +321,7 @@ JS;
             update_option('csn_wa_provider', in_array($prov, ['callmebot', 'cloud'], true) ? $prov : '');
             update_option('csn_wa_phone', preg_replace('/\D/', '', sanitize_text_field(wp_unslash($_POST['csn_wa_phone'] ?? ''))));
             update_option('csn_wa_cloud_phone_id', preg_replace('/\D/', '', sanitize_text_field(wp_unslash($_POST['csn_wa_cloud_phone_id'] ?? ''))));
+            update_option('csn_form_fields', preg_replace('/[^A-Za-z0-9_,\-]/', '', sanitize_text_field(wp_unslash($_POST['csn_form_fields'] ?? ''))));
             $repo = sanitize_text_field(wp_unslash($_POST['csn_github_repo'] ?? ''));
             update_option('csn_github_repo', preg_match('#^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$#', $repo) ? $repo : '');
             delete_transient(CSN_Updater::CACHE);
@@ -313,6 +331,48 @@ JS;
         }
         wp_safe_redirect(add_query_arg(['page' => 'csn', 'tab' => $tab, 'saved' => 1], admin_url('admin.php')));
         exit;
+    }
+
+    // Botão Testar: dispara um postback de teste (evento "test": não entra em relatórios nem no CSV).
+    static function test_postback() {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Sem permissão.'], 403);
+        }
+        check_ajax_referer('csn_test');
+        $slug = sanitize_key($_POST['slug'] ?? '');
+        $all  = CSN_Platforms::all();
+        if (!isset($all[$slug])) {
+            wp_send_json_error(['message' => 'Rede inválida.']);
+        }
+        global $wpdb;
+        $click = (string) $wpdb->get_var('SELECT click_id FROM ' . CSN_DB::clicks() . ' ORDER BY id DESC LIMIT 1');
+        $click = $click !== '' ? $click : 'teste1234567890';
+        $order = 'TESTE-' . gmdate('His');
+
+        $req = new WP_REST_Request('POST', '/csn/v1/postback/' . $slug);
+        $req->set_query_params([
+            'token' => (string) get_option('csn_token'), 'test' => 1, 'order_id' => $order, 'product' => 'TESTE',
+            'amount' => '1.00', 'currency' => 'USD', 'click_id' => $click, 'status' => 'approved',
+        ]);
+        if (($all[$slug]['mode'] ?? '') === 'clickbank_ins') {
+            $secret = (string) get_option('csn_cb_secret', '');
+            if ($secret === '') {
+                wp_send_json_error(['message' => 'Preencha a chave secreta do ClickBank em Configurações.']);
+            }
+            $iv   = random_bytes(16);
+            $json = wp_json_encode(['transactionType' => 'TEST_SALE', 'receipt' => $order, 'totalAccountAmount' => 1, 'currency' => 'USD',
+                'trackingCodes' => [str_replace('-', '_d_', $click)], 'lineItems' => [['productTitle' => 'TESTE']]]);
+            $enc  = openssl_encrypt($json, 'AES-256-CBC', substr(sha1($secret), 0, 32), OPENSSL_RAW_DATA, $iv);
+            $req->set_header('content-type', 'application/json');
+            $req->set_body(wp_json_encode(['notification' => base64_encode($enc), 'iv' => base64_encode($iv)]));
+        }
+
+        $res  = rest_do_request($req);
+        $code = $res->get_status();
+        if ($code === 200) {
+            wp_send_json_success(['message' => '✔ Teste enviado. Confira a notificação e a aba Conversões (linha "test").']);
+        }
+        wp_send_json_error(['message' => 'HTTP ' . $code . ' ' . wp_json_encode($res->get_data())]);
     }
 
     static function delete() {
@@ -352,7 +412,7 @@ JS;
         $from = sanitize_text_field(wp_unslash($_GET['from'] ?? ''));
         $to   = sanitize_text_field(wp_unslash($_GET['to'] ?? ''));
         $plat = sanitize_key($_GET['platform'] ?? '');
-        $where = ["event = 'sale'", "click_id <> ''", 'amount > 0'];
+        $where = ["event = 'sale'", "status = 'approved'", "click_id <> ''", 'amount > 0'];
         $args  = [];
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) { $where[] = 'created_at >= %s'; $args[] = get_gmt_from_date($from . ' 00:00:00'); }
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to))   { $where[] = 'created_at <= %s'; $args[] = get_gmt_from_date($to . ' 23:59:59'); }

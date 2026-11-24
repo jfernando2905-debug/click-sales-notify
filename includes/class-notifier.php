@@ -3,16 +3,25 @@ defined('ABSPATH') || exit;
 
 class CSN_Notifier {
     static function sale(array $c) {
-        $titles = ['sale' => '💰 Nova venda', 'refund' => '↩️ Reembolso', 'test' => '🧪 Teste'];
+        $status = (string) ($c['status'] ?? 'approved');
+        if ($c['event'] === 'test') {
+            $title = '🧪 Teste';
+        } elseif ($c['event'] === 'refund') {
+            $title = '↩️ Reembolso';
+        } else {
+            $titles = ['approved' => '💰 Venda aprovada', 'hold' => '⏳ Nova conversão (hold)', 'rejected' => '❌ Conversão rejeitada', 'trash' => '🗑️ Conversão em trash'];
+            $title  = $titles[$status] ?? '📩 Conversão (' . $status . ')';
+        }
         $text = sprintf(
-            "%s — %s\nValor: %s %s\nProduto: %s\nPedido: %s\nClick ID: %s\nPaís: %s",
-            $titles[$c['event']] ?? 'Conversão',
+            "%s — %s\nStatus: %s\nValor: %s %s\nProduto: %s\nPedido: %s\nClick ID: %s\nPaís: %s",
+            $title,
             $c['platform_name'],
+            $status,
             $c['currency'],
             number_format((float) $c['amount'], 2, '.', ''),
             $c['product'] !== '' ? $c['product'] : '-',
             $c['order_id'],
-            $c['click_id'] !== '' ? $c['click_id'] : '-',
+            $c['click_id'] !== '' ? $c['click_id'] : '(não recebido)',
             !empty($c['country']) ? $c['country'] : '-'
         );
 
@@ -36,7 +45,7 @@ class CSN_Notifier {
 
         $mail = (string) get_option('csn_email_to', '');
         if ($mail !== '') {
-            wp_mail($mail, ($titles[$c['event']] ?? 'Conversão') . ' — ' . $c['platform_name'], $text);
+            wp_mail($mail, $title . ' — ' . $c['platform_name'], $text);
         }
 
         self::whatsapp($text);

@@ -9,7 +9,16 @@ class CSN_Tracker {
 
     static function enqueue() {
         wp_enqueue_script('csn-tracker', CSN_URL . 'assets/tracker.js', [], CSN_VERSION, ['in_footer' => true, 'strategy' => 'defer']);
-        wp_localize_script('csn-tracker', 'CSN', ['endpoint' => esc_url_raw(rest_url('csn/v1/click'))]);
+        wp_localize_script('csn-tracker', 'CSN', [
+            'endpoint' => esc_url_raw(rest_url('csn/v1/click')),
+            'fields'   => self::fields(),
+        ]);
+    }
+
+    // Nomes de campos de formulário que recebem o gclid (padrão: sub2).
+    static function fields() {
+        $raw = (string) get_option('csn_form_fields', 'sub2');
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
     static function register() {
