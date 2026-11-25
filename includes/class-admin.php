@@ -40,7 +40,9 @@ class CSN_Admin {
             echo '<div class="notice notice-success is-dismissible"><p>Salvo.</p></div>';
         }
         if (isset($_GET['checked'])) {
-            echo '<div class="notice notice-info is-dismissible"><p>Verificação feita. Se houver versão nova, ela aparece em Plugins.</p></div>';
+            $msg = get_transient('csn_update_msg');
+            delete_transient('csn_update_msg');
+            echo '<div class="notice notice-info is-dismissible"><p>' . esc_html($msg ?: 'Verificação feita.') . '</p></div>';
         }
         if (isset($_GET['deleted'])) {
             echo '<div class="notice notice-success is-dismissible"><p>' . absint($_GET['deleted']) . ' conversão(ões) apagada(s).</p></div>';
@@ -274,7 +276,29 @@ JS;
 
         $snippet = '<script src="' . esc_url_raw(CSN_URL . 'assets/tracker.js') . '" data-endpoint="' . esc_url_raw(rest_url('csn/v1/click')) . '" data-fields="' . implode(',', CSN_Tracker::fields()) . '" defer></script>';
         echo '<hr><h3>Página fora deste WordPress</h3><p>Se o formulário fica em outra página ou domínio, cole este código no <code>&lt;head&gt;</code> dela. Nas páginas deste WordPress ele já é carregado sozinho.</p>';
-        echo '<textarea readonly rows="3" class="large-text code" onfocus="this.select()">' . esc_textarea($snippet) . '</textarea>';
+        echo '<p><textarea id="csn-snippet" readonly rows="3" class="large-text code" onfocus="this.select()">' . esc_textarea($snippet) . '</textarea></p>';
+        echo '<p><button type="button" class="button csn-copy" data-target="csn-snippet">Copiar código</button></p>';
+        echo <<<'JS'
+<script>
+document.querySelectorAll('.csn-copy').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var i = document.getElementById(b.dataset.target);
+    i.select();
+    var done = function () {
+      var o = b.textContent;
+      b.textContent = 'Copiado!';
+      setTimeout(function () { b.textContent = o; }, 1500);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(i.value).then(done);
+    } else {
+      document.execCommand('copy');
+      done();
+    }
+  });
+});
+</script>
+JS;
         echo '<hr><p>Versão instalada: <strong>' . esc_html(CSN_VERSION) . '</strong></p>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         wp_nonce_field('csn_check_update');

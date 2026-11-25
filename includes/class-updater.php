@@ -17,7 +17,7 @@ class CSN_Updater {
         return preg_match('#^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$#', $r) ? $r : '';
     }
 
-    // Última release publicada (cache de 12h; 1h se a consulta falhar).
+    // Última release publicada (cache de 12h; 1h se a consulta falhar). Guarda também o motivo da falha.
     static function latest() {
         $repo = self::repo();
         if ($repo === '') {
@@ -32,9 +32,18 @@ class CSN_Updater {
             'headers' => ['Accept' => 'application/vnd.github+json', 'User-Agent' => 'click-sales-notify'],
         ]);
         $data = [];
-        if (!is_wp_error($res) && wp_remote_retrieve_response_code($res) === 200) {
-            $j = json_decode(wp_remote_retrieve_body($res), true);
-            if (is_array($j) && !empty($j['tag_name'])) {
+        if (is_wp_error($res)) {
+            $diag = 'Não consegui acessar o GitHub: ' . $res->get_error_message();
+        } else {
+            $code = (int) wp_remote_retrieve_response_code($res);
+            $j    = json_decode(wp_remote_retrieve_body($res), true);
+            if ($code === 404) {
+                $diag = "Nenhuma release publicada em $repo (rascunhos e pré-releases não contam). Publique uma em GitHub → Releases.";
+            } elseif ($code === 403 || $code === 429) {
+                $diag = 'O GitHub limitou as consultas deste servidor. Tente de novo mais tarde.';
+            } elseif ($code !== 200 || !is_array($j) || empty($j['tag_name'])) {
+                $diag = "O GitHub respondeu HTTP $code sem dados de release.";
+            } else {
                 $pkg = '';
                 foreach ((array) ($j['assets'] ?? []) as $a) {
                     if (($a['name'] ?? '') === self::ASSET) {
@@ -42,7 +51,10 @@ class CSN_Updater {
                         break;
                     }
                 }
-                if (preg_match('#^https://github\.com/#', $pkg)) {
+                if (!preg_match('#^https://github\.com/#', $pkg)) {
+                    $diag = 'A release ' . $j['tag_name'] . ' existe, mas não tem o anexo ' . self::ASSET . '. Confira se o workflow rodou (aba Actions) ou anexe o zip manualmente.';
+                } else {
+                    $diag = '';
                     $data = [
                         'version' => ltrim((string) $j['tag_name'], 'vV'),
                         'package' => $pkg,
@@ -52,8 +64,24 @@ class CSN_Updater {
                 }
             }
         }
-        set_transient(self::CACHE, ['repo' => $repo, 'data' => $data], $data ? 12 * HOUR_IN_SECONDS : HOUR_IN_SECONDS);
+        set_transient(self::CACHE, ['repo' => $repo, 'data' => $data, 'diag' => $diag], $data ? 12 * HOUR_IN_SECONDS : HOUR_IN_SECONDS);
         return $data;
+    }
+
+    // Texto para o botão "Verificar atualizações agora": diz o resultado ou o motivo de não haver aviso.
+    static function diagnose() {
+        if (self::repo() === '') {
+            return 'Preencha o campo "Atualizações: repositório GitHub" (usuário/repo) e salve.';
+        }
+        $l = self::latest();
+        if (!$l) {
+            $c = get_transient(self::CACHE);
+            return (is_array($c) && !empty($c['diag'])) ? $c['diag'] : 'Sem informação da release.';
+        }
+        if (version_compare($l['version'], CSN_VERSION, '>')) {
+            return 'Atualização disponível: ' . $l['version'] . ' (instalada: ' . CSN_VERSION . '). Veja em Plugins.';
+        }
+        return 'Sem atualização: a release mais recente é a ' . $l['version'] . ' e a instalada é a ' . CSN_VERSION . '.';
     }
 
     static function check($transient) {
@@ -109,6 +137,7 @@ class CSN_Updater {
         if (function_exists('wp_update_plugins')) {
             wp_update_plugins();
         }
+        set_transient('csn_update_msg', self::diagnose(), 120);
         wp_safe_redirect(add_query_arg(['page' => 'csn', 'tab' => 'settings', 'checked' => 1], admin_url('admin.php')));
         exit;
     }

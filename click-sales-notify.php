@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Click Sales Notify
  * Description: Registra o gclid, recebe postbacks de redes de afiliado, avisa cada venda (Telegram/Discord/e-mail) e exporta conversões offline para o Google Ads.
- * Version: 1.2.2
+ * Version: 1.2.3
  * Requires at least: 6.3
  * Requires PHP: 7.4
  * Text Domain: csn
  */
 defined('ABSPATH') || exit;
 
-define('CSN_VERSION', '1.2.2');
+define('CSN_VERSION', '1.2.3');
 define('CSN_FILE', __FILE__);
 define('CSN_DIR', plugin_dir_path(__FILE__));
 define('CSN_URL', plugin_dir_url(__FILE__));
